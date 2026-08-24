@@ -1,0 +1,9 @@
+/bin/
+/frictionctl
+/demo-platform
+/demo-kube
+*.exe
+*.test
+*.out
+.work/
+dist/

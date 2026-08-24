@@ -1,0 +1,70 @@
+name: create-service-frictionful
+objective: running-service
+budget: create-service
+env:
+  FRICTION_DEMO_MODE: frictionful
+steps:
+  - id: scaffold
+    name: Scaffold repository
+    command: ["demo-platform", "scaffold", "--name", "demo", "--out", "${WORKDIR}"]
+    signals:
+      human_actions: 1
+      required_parameters: 1
+      tool: demo-platform
+  - id: validate-project
+    name: Validate generated project
+    command: ["demo-platform", "validate-project", "--dir", "${WORKDIR}"]
+    signals:
+      tool: demo-platform
+  - id: build
+    name: Build application
+    command: ["demo-platform", "build", "--dir", "${WORKDIR}"]
+    signals:
+      tool: demo-platform
+  - id: generate-deploy
+    name: Generate deployment configuration
+    command:
+      - demo-platform
+      - generate-deploy
+      - --dir
+      - ${WORKDIR}
+      - --namespace
+      - default
+      - --cpu-limit
+      - 100m
+      - --ingress-class
+      - nginx
+    signals:
+      human_actions: 1
+      required_parameters: 3
+      tool: demo-platform
+  - id: inspect-deploy
+    name: Review generated Kubernetes values
+    command: ["demo-platform", "inspect-deploy", "--dir", "${WORKDIR}"]
+    signals:
+      human_actions: 1
+      tool: demo-platform
+  - id: set-namespace
+    name: Configure Kubernetes namespace
+    command: ["demo-kube", "set-namespace", "--dir", "${WORKDIR}", "--namespace", "default"]
+    signals:
+      human_actions: 1
+      required_parameters: 1
+      tool: demo-kube
+  - id: validate-deploy
+    name: Validate deployment configuration
+    command: ["demo-platform", "validate-deploy", "--dir", "${WORKDIR}"]
+    max_retries: 1
+    signals:
+      tool: demo-platform
+  - id: deploy
+    name: Deploy test environment
+    command: ["demo-platform", "deploy", "--dir", "${WORKDIR}"]
+    signals:
+      human_actions: 1
+      tool: demo-platform
+  - id: verify
+    name: Verify workload
+    command: ["demo-platform", "verify", "--dir", "${WORKDIR}"]
+    signals:
+      tool: demo-platform

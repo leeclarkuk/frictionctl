@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/leeclarkuk/frictionctl/schemas/budget.schema.json",
+  "title": "frictionctl budget",
+  "type": "object",
+  "required": ["journey", "objective", "budgets"],
+  "additionalProperties": false,
+  "properties": {
+    "journey": { "type": "string", "minLength": 1 },
+    "objective": { "type": "string", "minLength": 1 },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "total_time": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h)$" },
+        "human_actions": { "type": "integer", "minimum": 0 },
+        "required_parameters": { "type": "integer", "minimum": 0 },
+        "tool_transitions": { "type": "integer", "minimum": 0 },
+        "approvals": { "type": "integer", "minimum": 0 },
+        "retries": { "type": "integer", "minimum": 0 },
+        "privilege_escalations": { "type": "integer", "minimum": 0 },
+        "documentation_lookups": { "type": "integer", "minimum": 0 },
+        "escape_hatch_usage": { "type": "integer", "minimum": 0 },
+        "friction_score": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    }
+  }
+}
