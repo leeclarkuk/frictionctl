@@ -1,0 +1,43 @@
+name: create-service
+objective: running-service
+env:
+  FRICTION_DEMO_MODE: paved
+steps:
+  - id: scaffold
+    name: Scaffold repository
+    command: ["demo-platform", "scaffold", "--name", "demo", "--out", "${WORKDIR}"]
+    signals:
+      human_actions: 1
+      required_parameters: 1
+      tool: demo-platform
+  - id: validate-project
+    name: Validate generated project
+    command: ["demo-platform", "validate-project", "--dir", "${WORKDIR}"]
+    signals:
+      tool: demo-platform
+  - id: build
+    name: Build application
+    command: ["demo-platform", "build", "--dir", "${WORKDIR}"]
+    signals:
+      tool: demo-platform
+  - id: generate-deploy
+    name: Generate deployment configuration
+    command: ["demo-platform", "generate-deploy", "--dir", "${WORKDIR}"]
+    signals:
+      tool: demo-platform
+  - id: validate-deploy
+    name: Validate deployment configuration
+    command: ["demo-platform", "validate-deploy", "--dir", "${WORKDIR}"]
+    signals:
+      tool: demo-platform
+  - id: deploy
+    name: Deploy test environment
+    command: ["demo-platform", "deploy", "--dir", "${WORKDIR}"]
+    signals:
+      human_actions: 1
+      tool: demo-platform
+  - id: verify
+    name: Verify workload
+    command: ["demo-platform", "verify", "--dir", "${WORKDIR}"]
+    signals:
+      tool: demo-platform
