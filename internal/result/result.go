@@ -5,6 +5,7 @@ import "time"
 // Result is the JSON-serialisable outcome of a journey run.
 type Result struct {
 	Journey    string    `json:"journey"`
+	Contract   string    `json:"contract"`
 	Objective  string    `json:"objective"`
 	StartedAt  time.Time `json:"started_at"`
 	Duration   string    `json:"duration"`

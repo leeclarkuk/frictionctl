@@ -67,7 +67,7 @@ func ExecuteWith(args []string, stdout, stderr io.Writer) int {
 func newRoot(opt *options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "frictionctl",
-		Short:         "Executable developer-experience SLOs for platform golden paths",
+		Short:         "Synthetic monitoring for developer experience",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
@@ -135,10 +135,21 @@ func runCmd(opt *options) *cobra.Command {
 }
 
 func compareCmd(opt *options) *cobra.Command {
-	return &cobra.Command{
+	var (
+		gateScore bool
+		gateTime  bool
+	)
+	cmd := &cobra.Command{
 		Use:   "compare BASELINE.json CURRENT.json",
 		Short: "Compare two journey results and fail on friction regressions",
-		Args:  cobra.ExactArgs(2),
+		Long: `Compare two results for the same contract and objective.
+
+Budgets and increases in declared discrete signals fail the comparison
+(exit 1). Total time, waiting time and the composite score are reported.
+They fail the comparison only with --gate-time or --gate-score.
+
+A contract or objective mismatch is an error (exit 2), not a regression.`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseline, err := result.LoadFile(args[0])
 			if err != nil {
@@ -148,7 +159,13 @@ func compareCmd(opt *options) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			rep := compare.Diff(baseline, current)
+			if err := compare.CheckIdentity(baseline, current); err != nil {
+				return exitError{code: ExitErr, msg: err.Error()}
+			}
+			rep := compare.Diff(baseline, current, compare.Options{
+				GateScore: gateScore,
+				GateTime:  gateTime,
+			})
 			if opt.json {
 				if err := report.JSON(opt.stdout, rep); err != nil {
 					return err
@@ -162,6 +179,9 @@ func compareCmd(opt *options) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&gateScore, "gate-score", false, "fail when the composite friction score increases")
+	cmd.Flags().BoolVar(&gateTime, "gate-time", false, "fail when total or waiting time increases")
+	return cmd
 }
 
 func listCmd(opt *options) *cobra.Command {
@@ -218,8 +238,7 @@ func explainCmd(opt *options) *cobra.Command {
 				return err
 			}
 			var s result.Signals
-			prev := ""
-			tools := 0
+			var tools []string
 			for _, step := range j.Steps {
 				s.HumanActions += step.Signals.HumanActions
 				s.RequiredParameters += step.Signals.RequiredParameters
@@ -231,18 +250,9 @@ func explainCmd(opt *options) *cobra.Command {
 				if tool == "" && len(step.Command) > 0 {
 					tool = step.Command[0]
 				}
-				if tool == "" {
-					continue
-				}
-				if prev == "" {
-					tools = 1
-					prev = tool
-				} else if tool != prev {
-					tools++
-					prev = tool
-				}
+				tools = append(tools, tool)
 			}
-			s.ToolTransitions = tools
+			s.ToolTransitions = result.CountToolTransitions(tools)
 			fmt.Fprintf(opt.stdout, "\nDeclared signals for %s (before a run; waiting time and retries are measured):\n", j.Name)
 			fmt.Fprintf(opt.stdout, "  human_actions:          %d\n", s.HumanActions)
 			fmt.Fprintf(opt.stdout, "  required_parameters:    %d\n", s.RequiredParameters)

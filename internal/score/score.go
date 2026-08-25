@@ -69,6 +69,7 @@ func FormulaHelp() string {
 	b.WriteString("Friction score\n\n")
 	b.WriteString("Lower is better. The score is a weighted sum of observable proxies, capped at 100.\n")
 	b.WriteString("It is not a measure of engineer skill, utilisation or cognitive load.\n")
+	b.WriteString("Budgets are policy. This number is explanation.\n")
 	b.WriteString("Pass or fail is decided by the budget, not by this number.\n\n")
 	b.WriteString("score = min(100,\n")
 	fmt.Fprintf(&b, "    %.1f * human_actions\n", WeightHumanActions)

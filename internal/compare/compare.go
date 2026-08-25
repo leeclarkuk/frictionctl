@@ -7,12 +7,21 @@ import (
 	"github.com/leeclarkuk/frictionctl/internal/result"
 )
 
+// Options control which reported signals are also merge gates.
+type Options struct {
+	GateScore bool
+	GateTime  bool
+}
+
 // Report is a baseline-versus-current comparison.
 type Report struct {
-	Journey string `json:"journey"`
-	Pass    bool   `json:"pass"`
-	Reason  string `json:"reason,omitempty"`
-	Rows    []Row  `json:"rows"`
+	Contract  string `json:"contract"`
+	Objective string `json:"objective"`
+	Journey   string `json:"journey"`
+	Pass      bool   `json:"pass"`
+	Reason    string `json:"reason,omitempty"`
+	Notes     string `json:"notes,omitempty"`
+	Rows      []Row  `json:"rows"`
 }
 
 // Row is one signal compared across two runs.
@@ -22,6 +31,7 @@ type Row struct {
 	Current  string `json:"current"`
 	Delta    string `json:"delta"`
 	Worse    bool   `json:"worse"`
+	Gated    bool   `json:"gated"`
 }
 
 type metric struct {
@@ -33,20 +43,39 @@ type metric struct {
 	gated   bool
 }
 
-// Diff fails when gated friction signals or the score get worse, or when the
-// current run misses its SLO. Wall time is reported but does not fail the
-// comparison on its own; it is too noisy for CI.
-func Diff(baseline, current result.Result) Report {
-	rep := Report{
-		Journey: current.Journey,
-		Pass:    true,
+// CheckIdentity returns an error unless both results share a contract and objective.
+func CheckIdentity(baseline, current result.Result) error {
+	if strings.TrimSpace(baseline.Contract) == "" || strings.TrimSpace(current.Contract) == "" {
+		return fmt.Errorf("both results must include a contract")
 	}
-	if baseline.Journey != "" && current.Journey != "" && baseline.Journey != current.Journey {
-		rep.Journey = current.Journey
+	if baseline.Contract != current.Contract {
+		return fmt.Errorf("cannot compare contract %q with %q", baseline.Contract, current.Contract)
+	}
+	if strings.TrimSpace(baseline.Objective) == "" || strings.TrimSpace(current.Objective) == "" {
+		return fmt.Errorf("both results must include an objective")
+	}
+	if baseline.Objective != current.Objective {
+		return fmt.Errorf("cannot compare objective %q with %q", baseline.Objective, current.Objective)
+	}
+	return nil
+}
+
+// Diff reports baseline versus current.
+//
+// Budgets and increases in declared discrete signals fail the comparison.
+// Total time, waiting time and the composite score are reported; they fail
+// only when explicitly gated.
+func Diff(baseline, current result.Result, opts Options) Report {
+	rep := Report{
+		Contract:  current.Contract,
+		Objective: current.Objective,
+		Journey:   current.Journey,
+		Pass:      true,
 	}
 
 	metrics := []metric{
-		{"time_to_service", float64(baseline.Signals.TotalTimeMS), float64(current.Signals.TotalTimeMS), formatMS, false, false},
+		{"time_to_service", float64(baseline.Signals.TotalTimeMS), float64(current.Signals.TotalTimeMS), formatMS, false, opts.GateTime},
+		{"waiting_time", float64(baseline.Signals.WaitingMS), float64(current.Signals.WaitingMS), formatMS, false, opts.GateTime},
 		{"human_actions", float64(baseline.Signals.HumanActions), float64(current.Signals.HumanActions), formatInt, true, true},
 		{"required_parameters", float64(baseline.Signals.RequiredParameters), float64(current.Signals.RequiredParameters), formatInt, true, true},
 		{"tool_transitions", float64(baseline.Signals.ToolTransitions), float64(current.Signals.ToolTransitions), formatInt, true, true},
@@ -55,21 +84,26 @@ func Diff(baseline, current result.Result) Report {
 		{"privilege_escalations", float64(baseline.Signals.PrivilegeEscalations), float64(current.Signals.PrivilegeEscalations), formatInt, true, true},
 		{"documentation_lookups", float64(baseline.Signals.DocumentationLookups), float64(current.Signals.DocumentationLookups), formatInt, true, true},
 		{"escape_hatch_usage", float64(baseline.Signals.EscapeHatchUsage), float64(current.Signals.EscapeHatchUsage), formatInt, true, true},
-		{"friction_score", baseline.Score.Value, current.Score.Value, formatScore, false, true},
+		{"friction_score", baseline.Score.Value, current.Score.Value, formatScore, false, opts.GateScore},
 	}
 
-	var worse []string
+	var worse, noted []string
 	for _, m := range metrics {
+		increased := m.curr > m.base
 		row := Row{
 			Signal:   m.name,
 			Baseline: m.format(m.base),
 			Current:  m.format(m.curr),
 			Delta:    delta(m.base, m.curr, m.integer),
-			Worse:    m.gated && m.curr > m.base,
+			Worse:    increased && m.gated,
+			Gated:    m.gated,
 		}
 		rep.Rows = append(rep.Rows, row)
+		line := fmt.Sprintf("%s: %s → %s", m.name, row.Baseline, row.Current)
 		if row.Worse {
-			worse = append(worse, fmt.Sprintf("%s: %s → %s", m.name, row.Baseline, row.Current))
+			worse = append(worse, line)
+		} else if increased {
+			noted = append(noted, line)
 		}
 	}
 
@@ -84,6 +118,9 @@ func Diff(baseline, current result.Result) Report {
 	if len(worse) > 0 {
 		rep.Pass = false
 		rep.Reason = reason(current, worse)
+	}
+	if len(noted) > 0 {
+		rep.Notes = "Reported, not gated:\n" + indentLines(noted)
 	}
 	return rep
 }
@@ -103,6 +140,14 @@ func reason(current result.Result, worse []string) string {
 		fmt.Fprintf(&b, "  %s\n", w)
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func indentLines(lines []string) string {
+	var b strings.Builder
+	for _, line := range lines {
+		fmt.Fprintf(&b, "  %s\n", line)
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 func delta(base, curr float64, integer bool) string {

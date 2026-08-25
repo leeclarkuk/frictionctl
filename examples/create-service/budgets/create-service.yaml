@@ -4,7 +4,7 @@ budgets:
   total_time: 2m
   human_actions: 3
   required_parameters: 2
-  tool_transitions: 2
+  tool_transitions: 1
   approvals: 0
   retries: 0
   privilege_escalations: 0
