@@ -65,10 +65,13 @@ func TestRunAggregatesSignalsAndRetries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if res.Contract != "create-service" {
+		t.Fatalf("contract = %s", res.Contract)
+	}
 	if res.Signals.HumanActions != 2 {
 		t.Fatalf("human_actions = %d", res.Signals.HumanActions)
 	}
-	if res.Signals.ToolTransitions != 2 {
+	if res.Signals.ToolTransitions != 1 {
 		t.Fatalf("tool_transitions = %d", res.Signals.ToolTransitions)
 	}
 	if res.Signals.Retries != 1 {

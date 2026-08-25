@@ -23,16 +23,16 @@ type File struct {
 // Limits are hard SLO gates. The composite score is not the pass/fail rule
 // unless FrictionScore is set.
 type Limits struct {
-	TotalTime            Duration `yaml:"total_time"`
-	HumanActions         *int     `yaml:"human_actions"`
-	RequiredParameters   *int     `yaml:"required_parameters"`
-	ToolTransitions      *int     `yaml:"tool_transitions"`
-	Approvals            *int     `yaml:"approvals"`
-	Retries              *int     `yaml:"retries"`
-	PrivilegeEscalations *int     `yaml:"privilege_escalations"`
-	DocumentationLookups *int     `yaml:"documentation_lookups"`
-	EscapeHatchUsage     *int     `yaml:"escape_hatch_usage"`
-	FrictionScore        *float64 `yaml:"friction_score"`
+	TotalTime            *Duration `yaml:"total_time"`
+	HumanActions         *int      `yaml:"human_actions"`
+	RequiredParameters   *int      `yaml:"required_parameters"`
+	ToolTransitions      *int      `yaml:"tool_transitions"`
+	Approvals            *int      `yaml:"approvals"`
+	Retries              *int      `yaml:"retries"`
+	PrivilegeEscalations *int      `yaml:"privilege_escalations"`
+	DocumentationLookups *int      `yaml:"documentation_lookups"`
+	EscapeHatchUsage     *int      `yaml:"escape_hatch_usage"`
+	FrictionScore        *float64  `yaml:"friction_score"`
 }
 
 // Duration wraps time.Duration for YAML values such as 1m, 90s, 5m.
@@ -105,12 +105,15 @@ func Find(dir, name string) (File, error) {
 // Evaluate compares measured signals against the budget.
 func Evaluate(limits Limits, signals result.Signals, score float64) result.SLO {
 	var breaches []result.Breach
-	if limits.TotalTime.Duration > 0 && time.Duration(signals.TotalTimeMS)*time.Millisecond > limits.TotalTime.Duration {
-		breaches = append(breaches, result.Breach{
-			Signal: "total_time",
-			Actual: formatMS(signals.TotalTimeMS),
-			Budget: limits.TotalTime.Duration.String(),
-		})
+	if limits.TotalTime != nil {
+		actual := time.Duration(signals.TotalTimeMS) * time.Millisecond
+		if actual > limits.TotalTime.Duration {
+			breaches = append(breaches, result.Breach{
+				Signal: "total_time",
+				Actual: formatMS(signals.TotalTimeMS),
+				Budget: limits.TotalTime.Duration.String(),
+			})
+		}
 	}
 	breaches = appendIntBreach(breaches, "human_actions", signals.HumanActions, limits.HumanActions)
 	breaches = appendIntBreach(breaches, "required_parameters", signals.RequiredParameters, limits.RequiredParameters)

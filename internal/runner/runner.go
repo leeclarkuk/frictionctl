@@ -55,9 +55,16 @@ func (r Runner) Run(ctx context.Context, j journey.Journey, b budget.File, opt O
 
 	out := result.Result{
 		Journey:   j.Name,
+		Contract:  b.Journey,
 		Objective: j.Objective,
 		StartedAt: started.UTC(),
 		Workdir:   workdir,
+	}
+	if out.Contract == "" {
+		out.Contract = j.BudgetName()
+	}
+	if b.Objective != "" && j.Objective != b.Objective {
+		return result.Result{}, fmt.Errorf("journey objective %q does not match budget objective %q", j.Objective, b.Objective)
 	}
 
 	for _, step := range j.Steps {
@@ -159,8 +166,9 @@ func completeStep(sr *result.Step, start time.Time, ok bool, errMsg string) {
 func aggregate(steps []result.Step, totalMS int64) result.Signals {
 	var s result.Signals
 	s.TotalTimeMS = totalMS
-	s.ToolTransitions = toolTransitions(steps)
+	tools := make([]string, 0, len(steps))
 	for _, step := range steps {
+		tools = append(tools, step.Tool)
 		s.HumanActions += step.Signals.HumanActions
 		s.RequiredParameters += step.Signals.RequiredParameters
 		s.Retries += step.Retries
@@ -172,27 +180,8 @@ func aggregate(steps []result.Step, totalMS int64) result.Signals {
 			s.WaitingMS += step.DurationMS
 		}
 	}
+	s.ToolTransitions = result.CountToolTransitions(tools)
 	return s
-}
-
-func toolTransitions(steps []result.Step) int {
-	n := 0
-	prev := ""
-	for _, s := range steps {
-		if s.Tool == "" {
-			continue
-		}
-		if prev == "" {
-			n = 1
-			prev = s.Tool
-			continue
-		}
-		if s.Tool != prev {
-			n++
-			prev = s.Tool
-		}
-	}
-	return n
 }
 
 func traceOf(r *result.Result) result.Trace {

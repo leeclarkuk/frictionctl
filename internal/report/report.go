@@ -14,7 +14,14 @@ import (
 
 // Journey writes the human report for a completed run.
 func Journey(w io.Writer, r result.Result) error {
-	fmt.Fprintf(w, "Developer Journey: %s\n\n", r.Journey)
+	fmt.Fprintf(w, "Developer Journey: %s\n", r.Journey)
+	if r.Contract != "" {
+		fmt.Fprintf(w, "Contract:          %s\n", r.Contract)
+	}
+	if r.Objective != "" {
+		fmt.Fprintf(w, "Objective:         %s\n", r.Objective)
+	}
+	fmt.Fprintln(w)
 	for _, s := range r.Steps {
 		mark := "ok"
 		if !s.OK {
@@ -49,6 +56,10 @@ func Journey(w io.Writer, r result.Result) error {
 // Compare writes the human comparison report.
 func Compare(w io.Writer, r compare.Report) error {
 	fmt.Fprintln(w, "Developer Journey Regression")
+	if r.Contract != "" || r.Objective != "" {
+		fmt.Fprintf(w, "Contract:  %s\n", r.Contract)
+		fmt.Fprintf(w, "Objective: %s\n", r.Objective)
+	}
 	fmt.Fprintln(w)
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(tw, "\tbaseline\tcurrent\tdelta\n")
@@ -61,12 +72,20 @@ func Compare(w io.Writer, r compare.Report) error {
 	fmt.Fprintln(w)
 	if r.Pass {
 		fmt.Fprintln(w, "PASS")
+		if r.Notes != "" {
+			fmt.Fprintln(w)
+			fmt.Fprintln(w, r.Notes)
+		}
 		return nil
 	}
 	fmt.Fprintln(w, "FAILED")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Reason:")
 	fmt.Fprintln(w, indent(r.Reason, "  "))
+	if r.Notes != "" {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, r.Notes)
+	}
 	return nil
 }
 

@@ -1,26 +1,55 @@
 # frictionctl
 
-Developer experience is a property of the platform. A platform change can fail CI for making engineers do more work.
+frictionctl is synthetic monitoring for developer experience.
 
-That is the whole product. Surveys, DORA dashboards and portal adoption numbers are useful, but they are lagging and they measure people. frictionctl measures the golden path. It runs a declared developer journey, records observable proxies, scores the friction in a formula you can read, and fails when a budget is breached or a change makes the path worse.
+Not a developer portal. Not a productivity dashboard. Not surveillance. Not an assistant.
 
-It does not watch engineers. It does not count commits. It does not invent a cognitive-load model. If a signal cannot be observed or honestly declared, it is not in the score.
+It runs a golden-path journey the way synthetic probes run a customer request, records observable friction, and fails CI when a platform change makes engineers do more work.
 
-## What it measures
+```
+Platform change
+      │
+      ▼
+Golden-path journey
+      │
+      ├── correctness
+      ├── security
+      ├── reliability
+      └── developer friction
+              │
+              ▼
+        friction budget
+              │
+       PASS ───┴─── FAIL
+                      │
+                      ▼
+                 PR blocked
+```
 
-| Signal | Meaning |
+## The contract
+
+Developer experience is a property of the platform. Surveys, DORA numbers and portal adoption are useful, but they lag and they measure people. frictionctl measures the path.
+
+Two implementations can share one contract. `create-service` and `create-service-frictionful` are different journeys. They are the same SLO: contract `create-service`, objective `running-service`. Compare will not silently score two unrelated journeys against each other. That is an error, not a regression.
+
+## What fails a change
+
+| Condition | Compare |
 | --- | --- |
-| `human_actions` | Work the platform failed to automate |
-| `required_parameters` | Decisions pushed onto the developer |
-| `tool_transitions` | Context switches between tools |
-| `retries` | Failed attempts before the step succeeded |
-| `approvals` | Manual gates |
-| `privilege_escalations` | Broken self-service |
-| `documentation_lookups` | The path was not legible |
-| `escape_hatch_usage` | The golden path was not enough |
-| `waiting_seconds` | Wall time the engineer is blocked on the platform |
+| Friction budget breached | FAIL |
+| Declared discrete signal up | FAIL |
+| Total or waiting time up | REPORT |
+| Composite score up | REPORT unless `--gate-score` or `--gate-time` |
 
-Pass or fail is the budget, not the score. The score exists so a regression has magnitude, not just a boolean.
+Budgets are policy. The score is explanation. Waiting time still contributes to the score, because it is a real cost. It does not fail a comparison by stealth when a CI runner is slow.
+
+Discrete signals: `human_actions`, `required_parameters`, `tool_transitions`, `retries`, `approvals`, `privilege_escalations`, `documentation_lookups`, `escape_hatch_usage`.
+
+`tool_transitions` counts context switches. One tool throughout is 0. `demo-platform → demo-kube → demo-platform` is 2.
+
+`total_time: 0s` is a real zero. Omitting `total_time` leaves it unconstrained.
+
+It does not watch engineers. It does not count commits. If a signal cannot be observed or honestly declared, it is not in the score.
 
 ```
 score = min(100,
@@ -36,12 +65,12 @@ score = min(100,
 )
 ```
 
-Lower is better. The weights live in code and in `frictionctl explain`. They are not tuned to flatter the demo.
+Lower is better. The weights live in code and in `frictionctl explain`.
 
 ## Install
 
 ```bash
-go install github.com/leeclarkuk/frictionctl/cmd/frictionctl@latest
+go install github.com/leeclarkuk/frictionctl/cmd/frictionctl@v0.1.0
 ```
 
 From a clone:
@@ -62,43 +91,29 @@ frictionctl version
 
 `--dir` / `-C` points at a directory with `journeys/` and `budgets/`. `--json` writes machine output. `run` accepts `--output` for a result file, `--budget` to override the budget path, and `--workdir` if you want to keep the artefacts.
 
-Exit codes: `0` pass, `1` SLO or regression fail, `2` operational error.
+`compare` accepts `--gate-score` and `--gate-time` if you really want wall time or the composite score as a merge gate. Default is not to.
 
-## Demo
+Exit codes: `0` pass, `1` SLO or regression fail, `2` operational error, including a contract or objective mismatch.
 
-The repository ships a local `create-service` golden path. It scaffolds a tiny Go service, builds it, writes deploy config, and records a fake deploy. There is no cluster.
+## Proof in this repository
 
-You need the two demo backends on `PATH`:
+The local `create-service` golden path scaffolds a tiny Go service, builds it, writes deploy config, and records a fake deploy. There is no cluster. The frictionful variant is the same contract with extra flags, a second tool, and a retry.
 
 ```bash
 go build -o demo-platform ./cmd/demo-platform
 go build -o demo-kube ./cmd/demo-kube
 export PATH="$PWD:$PATH"
-```
 
-Paved path, which should pass:
-
-```bash
 ./frictionctl run create-service --dir examples/create-service --output paved.json
-```
-
-Frictionful path, which should fail the same budget. Extra flags, an extra tool, a retry:
-
-```bash
 ./frictionctl run create-service-frictionful --dir examples/create-service --output frictionful.json
-```
-
-Compare them. This should fail:
-
-```bash
 ./frictionctl compare paved.json frictionful.json
 ```
 
-That loop is the point of the repository. If it does not work, nothing else here matters.
+The paved path must pass. The frictionful path must fail the shared budget. Compare must fail. A slower copy of the paved result must not fail compare. Tests cover that loop by building all three binaries.
 
 ## Writing a journey
 
-Signals that a shell cannot see (approvals, docs lookups, privilege, escape hatches) are declared on the step. Timing and retries are measured.
+Signals a shell cannot see (approvals, docs lookups, privilege, escape hatches) are declared on the step. Timing and retries are measured. Set `budget:` when the implementation name is not the contract name.
 
 ```yaml
 name: create-service
@@ -125,7 +140,7 @@ objective: running-service
 budgets:
   total_time: 1m
   human_actions: 3
-  tool_transitions: 2
+  tool_transitions: 1
   approvals: 0
   retries: 0
   privilege_escalations: 0
@@ -133,11 +148,11 @@ budgets:
 
 JSON schemas live in [`schemas/`](schemas/).
 
-## What this is not
+## What this is not, and what comes next
 
-No autotuning. No generated platform PRs. No live Kubernetes, Argo CD, Terraform or GitHub adapters. No OTLP export (the result JSON carries a nested span tree; that is enough for now). No onboarding journey that needs an identity provider. No surveillance.
+No autotuning. No generated platform PRs. No Kubernetes adapters for their own sake. No OTLP export yet. No surveillance.
 
-Those can wait until `run` and `compare` are honest.
+The next honest step is to point frictionctl at a real golden path, keep a baseline, and let CI reject a fixture that adds work. That is when the category stops being a thesis.
 
 ## Licence
 
